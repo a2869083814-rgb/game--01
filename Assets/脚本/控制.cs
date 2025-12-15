@@ -4,7 +4,9 @@ using UnityEngine;
 
 public class 控制 : MonoBehaviour
 {
-    public float moveSpeed = 5f;
+    public float moveSpeed;
+    public float walkSpeed = 5f;
+    public float runSpeed = 10f;
     public float rotateSpeed = 10f;
     Animator anim;
     Vector3 direction;//传递给动画的moveSpeed
@@ -21,7 +23,14 @@ public class 控制 : MonoBehaviour
         float v = Input.GetAxis("Vertical");
 
         direction = new Vector3(h, 0, v);
-
+        if (Input.GetKey(KeyCode.LeftShift))
+        {
+            moveSpeed = runSpeed;
+        }
+        else
+        {
+            moveSpeed = walkSpeed;
+        }
         if (direction.magnitude > 0.1f)
         {
             transform.Translate(direction * moveSpeed * Time.deltaTime, Space.World);
