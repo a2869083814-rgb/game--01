@@ -1,232 +1,514 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.InputSystem;
 
+/// <summary>
+/// ç¬¬ä¸‰äººç§°è§’è‰²ç§»åŠ¨æ§åˆ¶å™¨ï¼ˆç¨³å®šå•æ®µè·³ç‰ˆæœ¬ï¼‰
+/// ç‰¹ç‚¹ï¼š
+/// - ä¸å…è®¸ç©ºä¸­è¿è·³
+/// - Jump åŠ¨ç”»åªæ’­æ”¾ä¸€æ¬¡
+/// - è½åœ°åå¯å†æ¬¡èµ·è·³
+/// - ä¸ä¼šå¡ Jump åŠ¨ç”»
+/// </summary>
+[RequireComponent(typeof(CharacterController))]
 public class ThirdPersonMove : MonoBehaviour
 {
-    // Ëø¶¨Ä¿±ê£ºµ±ÓĞÄ¿±êÊ±£¬½ÇÉ«»áÃæÏò²¢¸ú×Ù¸ÃÄ¿±ê
+    #region ç§»åŠ¨å‚æ•°è®¾ç½®
+
+    [Header("ç§»åŠ¨è®¾ç½®")]
+    [Tooltip("åœ°é¢ç§»åŠ¨é€Ÿåº¦")]
+    public float MoveSpeed = 5f;
+    [Tooltip("ç©ºä¸­ç§»åŠ¨æ§åˆ¶ç³»æ•°ï¼ˆ0-1ï¼‰")]
+    [Range(0f, 1f)]
+    public float AirControl = 0.5f;
+
+    #endregion
+
+    #region æ—‹è½¬å‚æ•°è®¾ç½®
+
+    [Header("æ—‹è½¬è®¾ç½®")]
+    [Tooltip("è§’è‰²è½¬å‘å¹³æ»‘æ—¶é—´")]
+    public float RotationSmoothTime = 0.1f;
+    [Tooltip("é”å®šç›®æ ‡æ—¶è½¬å‘é€Ÿåº¦")]
+    public float LockRotationSpeed = 6f;
+
+    #endregion
+
+    #region è·³è·ƒä¸é‡åŠ›å‚æ•°
+
+    [Header("è·³è·ƒä¸é‡åŠ›è®¾ç½®")]
+    [Tooltip("è·³è·ƒé«˜åº¦")]
+    public float JumpHeight = 2f;
+    [Tooltip("é‡åŠ›åŠ é€Ÿåº¦")]
+    public float Gravity = -9.81f;
+    [Tooltip("è·³è·ƒå†·å´æ—¶é—´ï¼ˆé˜²æ­¢è¿è·³è¿‡å¿«ï¼‰")]
+    public float JumpCooldown = 0.2f;
+    [Tooltip("è·³è·ƒç¼“å†²æ—¶é—´ï¼ˆæŒ‰ä¸‹è·³è·ƒé”®åç­‰å¾…è½åœ°çš„æœ€å¤§æ—¶é—´ï¼‰")]
+    public float JumpBufferTime = 0.2f;
+    [Tooltip("åœŸç‹¼æ—¶é—´ï¼ˆç¦»å¼€å¹³å°è¾¹ç¼˜åä»å¯è·³è·ƒçš„æ—¶é—´ï¼‰")]
+    public float CoyoteTime = 0.15f;
+
+    #endregion
+
+    #region åœ°é¢æ£€æµ‹è®¾ç½®
+
+    [Header("åœ°é¢æ£€æµ‹è®¾ç½®")]
+    [Tooltip("åœ°é¢æ£€æµ‹çƒä½“åŠå¾„")]
+    public float GroundCheckRadius = 0.35f;
+    [Tooltip("åœ°é¢æ£€æµ‹å‘ä¸‹åç§»é‡")]
+    public float GroundCheckOffset = 0.1f;
+    [Tooltip("åœ°é¢å±‚çº§")]
+    public LayerMask GroundLayer;
+
+    #endregion
+
+    #region ç›®æ ‡é”å®šè®¾ç½®
+
+    [Header("ç›®æ ‡é”å®šè®¾ç½®")]
+    [Tooltip("é”å®šç›®æ ‡å¯¹è±¡")]
     public Transform LockTarget;
 
-    // ½ÇÉ«¿ØÖÆÆ÷×é¼ş£ºÓÃÓÚ´¦Àí½ÇÉ«ÒÆ¶¯ºÍÅö×²
-    private CharacterController _controller;
+    #endregion
 
-    // Ö÷ÉãÏñ»ú£ºÓÃÓÚ»ùÓÚÉãÏñ»úµÄÒÆ¶¯¼ÆËã
-    private GameObject _mainCamera;
+    #region ç»„ä»¶å¼•ç”¨å£°æ˜
 
-    // ½ÇÉ«ËÙ¶È£º°üº¬Ë®Æ½ºÍ´¹Ö±ËÙ¶È£¬ÓÃÓÚÖØÁ¦¼ÆËã
+    // æ ¸å¿ƒç»„ä»¶
+    private CharacterController _characterController;
+    private Animator _animator;
+    private PlayerStatusManager _playerStatus;
+
+    // æ‘„åƒæœºå¼•ç”¨
+    private Transform _mainCamera;
+
+    #endregion
+
+    #region ç§»åŠ¨çŠ¶æ€å˜é‡
+
+    // è¾“å…¥ç›¸å…³
+    private Vector2 _moveInput;
     private Vector3 _velocity;
+    private Vector3 _moveDirection;
 
-    // ÖØÁ¦¼ÓËÙ¶È£º¿ØÖÆ½ÇÉ«ÏÂÂäËÙ¶È£¬¸ºÖµ±íÊ¾ÏòÏÂ
-    public float gravity = -9.81f;
+    // è·³è·ƒä¸åœ°é¢çŠ¶æ€
+    private bool _isGrounded;
+    private bool _jumpConsumed;        // æœ¬æ¬¡ç¦»åœ°æ˜¯å¦å·²ä½¿ç”¨è·³è·ƒ
 
-    // ÒÆ¶¯ËÙ¶È£º½ÇÉ«Ë®Æ½ÒÆ¶¯µÄËÙ¶È
-    public float moveSpeed = 5f;
+    // è®¡æ—¶å™¨
+    private float _jumpBufferTimer;
+    private float _coyoteTimer;
+    private float _lastJumpTime;
 
-    // ³õÊ¼»¯º¯Êı£ºÔÚÓÎÏ·¿ªÊ¼Ê±µ÷ÓÃÒ»´Î
-    void Start()
+    // æ—‹è½¬ç›¸å…³
+    private float _rotationVelocity;
+
+    // å¸¸é‡å®šä¹‰
+    private const float INPUT_DEADZONE = 0.1f;          // è¾“å…¥æ­»åŒºï¼Œå°äºæ­¤å€¼å¿½ç•¥
+    private const float GROUNDED_VELOCITY_Y = -2f;      // æ¥åœ°æ—¶çš„å‚ç›´é€Ÿåº¦
+
+    #endregion
+
+    #region åŠ¨ç”»å‚æ•°å¸¸é‡
+
+    // åŠ¨ç”»å‚æ•°åç§°å¸¸é‡
+    private const string ANIM_AXIS_X = "AxisX";
+    private const string ANIM_AXIS_Y = "AxisY";
+    private const string ANIM_IS_GROUNDED = "IsGrounded";
+    private const string ANIM_JUMP = "Jump";
+
+    #endregion
+
+    #region Unityç”Ÿå‘½å‘¨æœŸæ–¹æ³•
+
+    /// <summary>
+    /// æ¸¸æˆå¼€å§‹æ—¶æ‰§è¡Œä¸€æ¬¡ï¼Œç”¨äºåˆå§‹åŒ–ç»„ä»¶
+    /// </summary>
+    private void Awake()
     {
-        // Èç¹ûÃ»ÓĞÖ¸¶¨Ö÷ÉãÏñ»ú£¬Í¨¹ı±êÇ©ÕÒµ½³¡¾°ÖĞµÄÖ÷ÉãÏñ»ú
-        if (_mainCamera == null)
-        {
-            _mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
-        }
-
-        // »ñÈ¡½ÇÉ«¿ØÖÆÆ÷×é¼ş£¬ÓÃÓÚÒÆ¶¯ºÍÅö×²¼ì²â
-        _controller = GetComponent<CharacterController>();
-
-        // »ñÈ¡¶¯»­¿ØÖÆÆ÷×é¼ş£¬ÓÃÓÚ¿ØÖÆ½ÇÉ«¶¯»­
-        _animator = GetComponent<Animator>();
+        InitializeComponents();
+        InitializeCameraReference();
     }
 
-    // ¶¯»­¿ØÖÆÆ÷£º¿ØÖÆ½ÇÉ«µÄ¶¯»­×´Ì¬
-    Animator _animator;
-
-    // Ä¿±êĞı×ª½Ç¶È£º½ÇÉ«ĞèÒªĞı×ªµ½µÄÄ¿±ê½Ç¶È
-    float _targetRot = 0.0f;
-
-    // Ğı×ªÆ½»¬Ê±¼ä£º¿ØÖÆĞı×ª¹ı¶ÉµÄÆ½»¬³Ì¶È£¬ÖµÔ½´óĞı×ªÔ½ÂıÔ½Æ½»¬
-    public float rotationSmoothTime = 0.1f;
-
-    // Ğı×ªËÙ¶È£ºÄÚ²¿±äÁ¿£¬ÓÃÓÚÆ½»¬Ğı×ª¼ÆËã
-    float _rotationVelocity;
-
-    // Ã¿Ö¡¸üĞÂº¯Êı£ºÓÎÏ·Ã¿Ò»Ö¡¶¼»áµ÷ÓÃ
-    void Update()
+    /// <summary>
+    /// æ¯å¸§æ‰§è¡Œä¸€æ¬¡ï¼Œå¤„ç†è§’è‰²ç§»åŠ¨é€»è¾‘
+    /// </summary>
+    private void Update()
     {
-        // ============ ÖØÁ¦ÏµÍ³£¨Ê¼ÖÕÓ¦ÓÃ£© ============
-        // ¼ì²â½ÇÉ«ÊÇ·ñÔÚµØÃæÉÏÇÒÏÂÂäËÙ¶ÈĞ¡ÓÚ0
-        // Èç¹ûÊÇ£¬¸øÒ»¸öĞ¡µÄÏòÏÂÁ¦È·±£½ÇÉ«ÎÈ¶¨ÔÚµØÃæ
-        if (_controller.isGrounded && _velocity.y < 0)
-        {
-            _velocity.y = -2f;
-        }
+        // æ­¥éª¤1ï¼šæ£€æµ‹åœ°é¢çŠ¶æ€
+        _isGrounded = CheckGrounded();
 
-        // Ó¦ÓÃÖØÁ¦£º¸ù¾İÖØÁ¦¼ÓËÙ¶È¸üĞÂ´¹Ö±ËÙ¶È
-        _velocity.y += gravity * Time.deltaTime;
+        // æ­¥éª¤2ï¼šå¤„ç†å„ç§è®¡æ—¶å™¨
+        HandleTimers();
 
-        // ============ ¸ù¾İËø¶¨×´Ì¬µ÷ÓÃ²»Í¬ÒÆ¶¯Ä£Ê½ ============
-        // Èç¹ûÃ»ÓĞËø¶¨Ä¿±ê£¬Ê¹ÓÃ×ÔÓÉÒÆ¶¯Ä£Ê½
-        if (LockTarget == null)
+        // æ­¥éª¤3ï¼šå¤„ç†è·³è·ƒé€»è¾‘
+        HandleJump();
+
+        // æ­¥éª¤4ï¼šå¤„ç†ç§»åŠ¨è¾“å…¥
+        HandleMovement(out Vector3 horizontalMove);
+
+        // æ­¥éª¤5ï¼šå¤„ç†è§’è‰²æ—‹è½¬
+        HandleRotation();
+
+        // æ­¥éª¤6ï¼šåº”ç”¨æœ€ç»ˆç§»åŠ¨
+        ApplyMovement(horizontalMove);
+
+        // æ­¥éª¤7ï¼šæ›´æ–°åŠ¨ç”»å‚æ•°
+        UpdateAnimator();
+    }
+
+    #endregion
+
+    #region åˆå§‹åŒ–æ–¹æ³•
+
+    /// <summary>
+    /// åˆå§‹åŒ–è§’è‰²æ‰€éœ€çš„æ‰€æœ‰ç»„ä»¶
+    /// </summary>
+    private void InitializeComponents()
+    {
+        _characterController = GetComponent<CharacterController>();
+        _animator = GetComponent<Animator>();
+        _playerStatus = GetComponent<PlayerStatusManager>();
+    }
+
+    /// <summary>
+    /// åˆå§‹åŒ–ä¸»æ‘„åƒæœºå¼•ç”¨
+    /// </summary>
+    private void InitializeCameraReference()
+    {
+        GameObject cameraObject = GameObject.FindGameObjectWithTag("MainCamera");
+        if (cameraObject != null)
         {
-            Freemove();
+            _mainCamera = cameraObject.transform;
         }
-        // Èç¹ûÓĞËø¶¨Ä¿±ê£¬Ê¹ÓÃËø¶¨Ä¿±êÒÆ¶¯Ä£Ê½
         else
         {
-            Lockmove();
-        }
-
-        // ============ Ê¼ÖÕÓ¦ÓÃÖØÁ¦ÒÆ¶¯£¨ÎŞÂÛÄÄÖÖÄ£Ê½£© ============
-        // È·±£ÖØÁ¦ÔÚÈÎºÎÇé¿öÏÂ¶¼Æğ×÷ÓÃ
-        ApplyGravityMovement();
-    }
-
-    // Ó¦ÓÃÖØÁ¦ÒÆ¶¯º¯Êı£º×¨ÃÅ´¦Àí´¹Ö±·½ÏòµÄÖØÁ¦ÒÆ¶¯
-    void ApplyGravityMovement()
-    {
-        // ´´½¨ÖØÁ¦ÒÆ¶¯ÏòÁ¿£ºÖ»°üº¬´¹Ö±·½ÏòµÄÒÆ¶¯
-        Vector3 gravityMove = new Vector3(0, _velocity.y * Time.deltaTime, 0);
-
-        // Èç¹ûÓĞÖØÁ¦ÒÆ¶¯£¬Ó¦ÓÃËü
-        if (gravityMove != Vector3.zero)
-        {
-            // µ÷ÓÃCharacterControllerµÄMove·½·¨Ó¦ÓÃÖØÁ¦ÒÆ¶¯
-            _controller.Move(gravityMove);
+            Debug.LogWarning("æœªæ‰¾åˆ°æ ‡ç­¾ä¸ºMainCameraçš„æ‘„åƒæœºï¼Œè§’è‰²ç§»åŠ¨å¯èƒ½æ— æ³•æ­£ç¡®è®¡ç®—æ–¹å‘");
         }
     }
 
-    // ×ÔÓÉÒÆ¶¯º¯Êı£ºÃ»ÓĞËø¶¨Ä¿±êÊ±µÄÒÆ¶¯Âß¼­
-    void Freemove()
+    #endregion
+
+    #region è®¡æ—¶å™¨å¤„ç†æ–¹æ³•
+
+    /// <summary>
+    /// å¤„ç†æ‰€æœ‰ä¸æ—¶é—´ç›¸å…³çš„çŠ¶æ€æ›´æ–°
+    /// åŒ…æ‹¬åœŸç‹¼æ—¶é—´ã€è·³è·ƒç¼“å†²ã€é‡åŠ›åº”ç”¨ç­‰
+    /// </summary>
+    private void HandleTimers()
     {
-        // Èç¹ûÓĞÊäÈë£¨Íæ¼Ò°´ÏÂÁËÒÆ¶¯¼ü£©
-        if (_move != Vector2.zero)
+        // æ›´æ–°æ¥åœ°çŠ¶æ€è®¡æ—¶å™¨
+        if (_isGrounded)
         {
-            // ½«2DÊäÈë×ª»»Îª3D·½ÏòÏòÁ¿£¬ºöÂÔYÖá£¨´¹Ö±·½Ïò£©
-            Vector3 inputDir = new Vector3(_move.x, 0, _move.y).normalized;
+            _coyoteTimer = CoyoteTime;
+            _jumpConsumed = false;     // è½åœ°åé‡ç½®è·³è·ƒæ¶ˆè€—çŠ¶æ€
 
-            // ¼ÆËãÄ¿±êĞı×ª½Ç¶È£º
-            // 1. Atan2¼ÆËãÊäÈë·½ÏòÏà¶ÔÓÚÊÀ½ç×ø±êÏµµÄ½Ç¶È£¨»¡¶È£©
-            // 2. Rad2Deg½«»¡¶È×ª»»Îª¶È
-            // 3. ¼ÓÉÏÉãÏñ»úµÄYÖáĞı×ª£¬Ê¹ÒÆ¶¯·½Ïò»ùÓÚÉãÏñ»úÊÓ½Ç
-            _targetRot = Mathf.Atan2(inputDir.x, inputDir.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
+            // ç¡®ä¿è§’è‰²åœ¨åœ°é¢æ—¶ä¿æŒç¨³å®š
+            if (_velocity.y < 0)
+            {
+                _velocity.y = GROUNDED_VELOCITY_Y;
+            }
+        }
 
-            // Æ½»¬Ğı×ª£ºÊ¹½ÇÉ«Öğ½¥×ªÏòÄ¿±ê·½Ïò£¬¶ø²»ÊÇË²¼ä×ªÏò
-            float rotation = Mathf.SmoothDampAngle(
-                transform.eulerAngles.y,     // µ±Ç°Ğı×ª½Ç¶È
-                _targetRot,                  // Ä¿±êĞı×ª½Ç¶È
-                ref _rotationVelocity,       // ÒıÓÃĞı×ªËÙ¶È±äÁ¿£¬ÓÃÓÚÆ½»¬¼ÆËã
-                rotationSmoothTime           // Æ½»¬Ê±¼ä£¬¿ØÖÆĞı×ªËÙ¶È
+        if (_playerStatus != null && _playerStatus.CurrentState == PlayerState.Jumping)
+        {
+            _playerStatus.TryChangeState(PlayerState.Idle);
+        }// è½åœ°åæ¢å¤ç©ºé—²çŠ¶æ€
+
+        if (_animator != null)
+        {
+            _animator.ResetTrigger(ANIM_JUMP);
+        }// é‡ç½®è·³è·ƒè§¦å‘å™¨ï¼Œé˜²æ­¢å¡ä½åŠ¨ç”»
+
+        else
+        {
+            // åœ¨ç©ºä¸­æ—¶é€’å‡åœŸç‹¼æ—¶é—´
+            _coyoteTimer -= Time.deltaTime;
+        }
+
+        // æ›´æ–°è·³è·ƒç¼“å†²è®¡æ—¶å™¨
+        _jumpBufferTimer -= Time.deltaTime;
+
+        // åº”ç”¨é‡åŠ›åŠ é€Ÿåº¦
+        _velocity.y += Gravity * Time.deltaTime;
+    }
+
+    #endregion
+
+    #region è·³è·ƒå¤„ç†æ–¹æ³•
+
+    /// <summary>
+    /// å¤„ç†è·³è·ƒé€»è¾‘ï¼Œåˆ¤æ–­æ˜¯å¦å¯ä»¥è·³è·ƒå¹¶æ‰§è¡Œè·³è·ƒ
+    /// </summary>
+    private void HandleJump()
+    {
+        // æ£€æŸ¥è·³è·ƒæ¡ä»¶
+        bool canJump =
+            _jumpBufferTimer > 0 &&                    // è·³è·ƒç¼“å†²æ—¶é—´å†…
+            _coyoteTimer > 0 &&                        // åœŸç‹¼æ—¶é—´å†…
+            !_jumpConsumed &&                          // æœ¬æ¬¡ç¦»åœ°æœªä½¿ç”¨è·³è·ƒ
+            Time.time - _lastJumpTime > JumpCooldown && // è·³è·ƒå†·å´å·²è¿‡
+            (_playerStatus == null || _playerStatus.CanJump()); // çŠ¶æ€ç³»ç»Ÿå…è®¸
+
+        // æ¡ä»¶ä¸æ»¡è¶³æ—¶ç›´æ¥è¿”å›
+        if (!canJump)
+            return;
+
+        // æ‰§è¡Œè·³è·ƒè®¡ç®—
+        _velocity.y = Mathf.Sqrt(JumpHeight * -2f * Gravity);
+
+        // æ›´æ–°è·³è·ƒçŠ¶æ€
+        _jumpConsumed = true;
+        _jumpBufferTimer = 0;
+        _coyoteTimer = 0;
+        _lastJumpTime = Time.time;
+
+        // è§¦å‘è·³è·ƒåŠ¨ç”»
+        if (_animator != null)
+        {
+            _animator.SetTrigger(ANIM_JUMP);
+        }
+
+        // æ›´æ–°è§’è‰²çŠ¶æ€
+        if (_playerStatus != null)
+        {
+            _playerStatus.TryChangeState(PlayerState.Jumping);
+        }
+    }
+
+    #endregion
+
+    #region ç§»åŠ¨å¤„ç†æ–¹æ³•
+
+    /// <summary>
+    /// å¤„ç†ç§»åŠ¨è¾“å…¥ï¼Œè®¡ç®—æ°´å¹³ç§»åŠ¨å‘é‡
+    /// </summary>
+    /// <param name="horizontalMove">è¾“å‡ºçš„æ°´å¹³ç§»åŠ¨å‘é‡</param>
+    private void HandleMovement(out Vector3 horizontalMove)
+    {
+        // åˆå§‹åŒ–è¾“å‡ºå‚æ•°
+        horizontalMove = Vector3.zero;
+        _moveDirection = Vector3.zero;
+
+        // æ£€æŸ¥è¾“å…¥æ˜¯å¦æœ‰æ•ˆ
+        if (_moveInput.magnitude < INPUT_DEADZONE)
+            return;
+
+        // æ£€æŸ¥è§’è‰²çŠ¶æ€æ˜¯å¦å…è®¸ç§»åŠ¨
+        if (_playerStatus != null && !CanMove())
+            return;
+
+        // è®¡ç®—æ‘„åƒæœºç›¸å¯¹ç§»åŠ¨æ–¹å‘
+        Vector3 inputDirection = new Vector3(_moveInput.x, 0, _moveInput.y).normalized;
+        float cameraYaw = _mainCamera != null ? _mainCamera.eulerAngles.y : 0f;
+
+        float targetAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + cameraYaw;
+        _moveDirection = Quaternion.Euler(0, targetAngle, 0) * Vector3.forward;
+
+        // è®¡ç®—ç§»åŠ¨é€Ÿåº¦ï¼ˆç©ºä¸­æ—¶é™ä½æ§åˆ¶åŠ›ï¼‰
+        float currentSpeed = _isGrounded ? MoveSpeed : MoveSpeed * AirControl;
+        horizontalMove = _moveDirection * currentSpeed * Time.deltaTime;
+    }
+
+    /// <summary>
+    /// åº”ç”¨æœ€ç»ˆç§»åŠ¨å‘é‡åˆ°è§’è‰²æ§åˆ¶å™¨
+    /// </summary>
+    /// <param name="horizontalMove">æ°´å¹³ç§»åŠ¨å‘é‡</param>
+    private void ApplyMovement(Vector3 horizontalMove)
+    {
+        // ç»„åˆæ°´å¹³ç§»åŠ¨å’Œå‚ç›´é€Ÿåº¦
+        Vector3 finalMovement = horizontalMove + Vector3.up * _velocity.y * Time.deltaTime;
+
+        // é€šè¿‡CharacterControlleræ‰§è¡Œç§»åŠ¨
+        _characterController.Move(finalMovement);
+    }
+
+    #endregion
+
+    #region æ—‹è½¬å¤„ç†æ–¹æ³•
+
+    /// <summary>
+    /// å¤„ç†è§’è‰²æ—‹è½¬é€»è¾‘
+    /// æ ¹æ®æ˜¯å¦é”å®šç›®æ ‡ä½¿ç”¨ä¸åŒçš„æ—‹è½¬ç­–ç•¥
+    /// </summary>
+    private void HandleRotation()
+    {
+        // é”å®šç›®æ ‡ä¼˜å…ˆé€»è¾‘
+        if (LockTarget != null)
+        {
+            HandleLockedRotation();
+            return;
+        }
+
+        // è‡ªç”±ç§»åŠ¨æ—‹è½¬é€»è¾‘
+        HandleFreeRotation();
+    }
+
+    /// <summary>
+    /// å¤„ç†é”å®šç›®æ ‡æ—¶çš„è§’è‰²æ—‹è½¬
+    /// </summary>
+    private void HandleLockedRotation()
+    {
+        // è®¡ç®—æŒ‡å‘é”å®šç›®æ ‡çš„æ–¹å‘
+        Vector3 directionToTarget = LockTarget.position - transform.position;
+        directionToTarget.y = 0;
+
+        // ç¡®ä¿æ–¹å‘æœ‰æ•ˆ
+        if (directionToTarget.sqrMagnitude > 0.01f)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(directionToTarget);
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                targetRotation,
+                Time.deltaTime * LockRotationSpeed
             );
-
-            // Ó¦ÓÃĞı×ªµ½½ÇÉ«
-            transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
-
-            // ¼ÆËãË®Æ½ÒÆ¶¯·½Ïò£º
-            // ½«ÊÀ½ç×ø±êÏµµÄÇ°·½Ïò£¨Vector3.forward£©¸ù¾İÄ¿±êĞı×ª½Ç¶ÈĞı×ª
-            Vector3 moveDirection = Quaternion.Euler(0f, _targetRot, 0f) * Vector3.forward;
-
-            // ´´½¨Ë®Æ½ÒÆ¶¯ÏòÁ¿£º
-            // 1. ¹éÒ»»¯È·±£·½ÏòÕıÈ·
-            // 2. ³ËÒÔÒÆ¶¯ËÙ¶È
-            // 3. ³ËÒÔTime.deltaTimeÈ·±£Ö¡ÂÊÎŞ¹Ø
-            Vector3 horizontalMove = moveDirection.normalized * moveSpeed * Time.deltaTime;
-
-            // Ó¦ÓÃË®Æ½ÒÆ¶¯£ºµ÷ÓÃCharacterControllerµÄMove·½·¨
-            _controller.Move(horizontalMove);
         }
-
-        // ¸üĞÂ¶¯»­²ÎÊı£º¸ù¾İÒÆ¶¯×´Ì¬¸üĞÂ¶¯»­
-        UpdateFreeAnimations();
     }
 
-    // Ëø¶¨ÒÆ¶¯º¯Êı£ºÓĞËø¶¨Ä¿±êÊ±µÄÒÆ¶¯Âß¼­
-    void Lockmove()
+    /// <summary>
+    /// å¤„ç†è‡ªç”±ç§»åŠ¨æ—¶çš„è§’è‰²æ—‹è½¬
+    /// </summary>
+    private void HandleFreeRotation()
     {
-        // ¼ÆËãµ½Ëø¶¨Ä¿±êµÄË®Æ½·½ÏòÏòÁ¿
-        Vector3 dir = LockTarget.position - transform.position;
-        dir.y = 0; // ºöÂÔYÖá²îÒì£¬Ö»¹ØĞÄË®Æ½·½Ïò
+        // æ£€æŸ¥æ˜¯å¦æœ‰æœ‰æ•ˆç§»åŠ¨æ–¹å‘
+        if (_moveDirection.sqrMagnitude < 0.01f)
+            return;
 
-        // ¼´Ê¹Ëø¶¨Ä¿±ê£¬Ò²ÔÊĞí½ÇÉ«ÒÆ¶¯
-        if (_move != Vector2.zero)
-        {
-            // »ùÓÚÉãÏñ»ú¼ÆËãÒÆ¶¯·½Ïò£¨Óë×ÔÓÉÒÆ¶¯ÏàÍ¬£©
-            Vector3 inputDir = new Vector3(_move.x, 0, _move.y).normalized;
-            float targetAngle = Mathf.Atan2(inputDir.x, inputDir.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
-            Vector3 moveDirection = Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward;
+        // è®¡ç®—ç›®æ ‡æ—‹è½¬è§’åº¦
+        float targetAngle = Mathf.Atan2(_moveDirection.x, _moveDirection.z) * Mathf.Rad2Deg;
 
-            // Ó¦ÓÃË®Æ½ÒÆ¶¯
-            Vector3 horizontalMove = moveDirection.normalized * moveSpeed * Time.deltaTime;
-            _controller.Move(horizontalMove);
-        }
+        // å¹³æ»‘æ—‹è½¬
+        float smoothedAngle = Mathf.SmoothDampAngle(
+            transform.eulerAngles.y,
+            targetAngle,
+            ref _rotationVelocity,
+            RotationSmoothTime
+        );
 
-        // Æ½»¬Ğı×ªÃæÏòÄ¿±ê£ºÊ¹½ÇÉ«Öğ½¥×ªÏòËø¶¨Ä¿±ê
-        if (dir != Vector3.zero)
-        {
-            // ¼ÆËãÃæÏòÄ¿±êµÄĞı×ª
-            Quaternion targetRotation = Quaternion.LookRotation(dir);
-
-            // Ê¹ÓÃÇòÃæ²åÖµÆ½»¬Ğı×ª
-            transform.rotation = Quaternion.Slerp(transform.rotation,targetRotation,Time.deltaTime * 5f);
-        }
-
-        // ¸üĞÂËø¶¨×´Ì¬ÏÂµÄ¶¯»­²ÎÊı
-        UpdateLockAnimations();
+        // åº”ç”¨æ—‹è½¬
+        transform.rotation = Quaternion.Euler(0, smoothedAngle, 0);
     }
 
-    // ¸üĞÂ×ÔÓÉ¶¯»­º¯Êı£º¿ØÖÆ×ÔÓÉÒÆ¶¯×´Ì¬ÏÂµÄ¶¯»­
-    void UpdateFreeAnimations()
+    #endregion
+
+    #region çŠ¶æ€æ£€æµ‹æ–¹æ³•
+
+    /// <summary>
+    /// æ£€æµ‹è§’è‰²æ˜¯å¦æ¥è§¦åœ°é¢
+    /// ä½¿ç”¨çƒä½“æ£€æµ‹æ³•ï¼Œä»è§’è‰²åº•éƒ¨å‘ä¸‹æ£€æµ‹
+    /// </summary>
+    /// <returns>æ˜¯å¦æ¥è§¦åœ°é¢</returns>
+    private bool CheckGrounded()
     {
-        // È·±£¶¯»­¿ØÖÆÆ÷´æÔÚ
-        if (_animator != null)
+        // è®¡ç®—æ£€æµ‹çƒä½“ä½ç½®
+        Vector3 spherePosition = transform.position +
+            Vector3.down * (_characterController.height / 2 + GroundCheckOffset);
+
+        // æ‰§è¡Œçƒä½“æ£€æµ‹
+        return Physics.CheckSphere(spherePosition, GroundCheckRadius, GroundLayer);
+    }
+
+    /// <summary>
+    /// æ£€æŸ¥è§’è‰²å½“å‰çŠ¶æ€æ˜¯å¦å…è®¸ç§»åŠ¨
+    /// æ ¹æ®çŠ¶æ€æœºåˆ¤æ–­æ˜¯å¦å¯ä»¥ç§»åŠ¨
+    /// </summary>
+    /// <returns>æ˜¯å¦å…è®¸ç§»åŠ¨</returns>
+    private bool CanMove()
+    {
+        // å¦‚æœæ²¡æœ‰çŠ¶æ€ç®¡ç†å™¨ï¼Œé»˜è®¤å…è®¸ç§»åŠ¨
+        if (_playerStatus == null)
+            return true;
+
+        // æ ¹æ®å½“å‰çŠ¶æ€åˆ¤æ–­æ˜¯å¦å…è®¸ç§»åŠ¨
+        switch (_playerStatus.CurrentState)
         {
-            // »ñÈ¡µ±Ç°µÄAxisY²ÎÊıÖµ£¨Í¨³£¿ØÖÆÇ°ºóÒÆ¶¯£©
-            var AxisY = _animator.GetFloat("AxisY");
-
-            // Æ½»¬¹ı¶Éµ½Ä¿±êÖµ£º_move.magnitudeÊÇÊäÈëÏòÁ¿µÄ³¤¶È£¨0-1£©
-            AxisY = Mathf.MoveTowards(AxisY, _move.magnitude, Time.deltaTime * 5f);
-
-            // ÉèÖÃAxisY²ÎÊıµ½¶¯»­¿ØÖÆÆ÷
-            _animator.SetFloat("AxisY", AxisY);
-
-            // »ñÈ¡µ±Ç°µÄAxisX²ÎÊıÖµ£¨Í¨³£¿ØÖÆ×óÓÒÒÆ¶¯£©
-            var AxisX = _animator.GetFloat("AxisX");
-
-            // Æ½»¬¹ı¶Éµ½Ä¿±êÖµ£º_move.xÊÇÊäÈëµÄX·ÖÁ¿£¨-1µ½1£©
-            AxisX = Mathf.MoveTowards(AxisX, _move.x, Time.deltaTime * 5f);
-
-            // ÉèÖÃAxisX²ÎÊıµ½¶¯»­¿ØÖÆÆ÷
-            _animator.SetFloat("AxisX", AxisX);
+            case PlayerState.Attacking:
+            case PlayerState.Rolling:
+            case PlayerState.TakingDamage:
+            case PlayerState.Dead:
+                return false;
+            default:
+                return true;
         }
     }
 
-    // ¸üĞÂËø¶¨¶¯»­º¯Êı£º¿ØÖÆËø¶¨Ä¿±ê×´Ì¬ÏÂµÄ¶¯»­
-    void UpdateLockAnimations()
+    #endregion
+
+    #region åŠ¨ç”»å¤„ç†æ–¹æ³•
+
+    /// <summary>
+    /// æ›´æ–°åŠ¨ç”»æ§åˆ¶å™¨å‚æ•°
+    /// å°†è§’è‰²çŠ¶æ€åŒæ­¥åˆ°åŠ¨ç”»çŠ¶æ€æœº
+    /// </summary>
+    private void UpdateAnimator()
     {
-        // È·±£¶¯»­¿ØÖÆÆ÷´æÔÚ    
-        if (_animator != null)
+        // å®‰å…¨æ£€æŸ¥
+        if (_animator == null)
+            return;
+
+        // æ›´æ–°åŸºç¡€çŠ¶æ€å‚æ•°
+        _animator.SetBool(ANIM_IS_GROUNDED, _isGrounded);
+
+        // æ›´æ–°ç§»åŠ¨è¾“å…¥å‚æ•°
+        _animator.SetFloat(ANIM_AXIS_X, _moveInput.x);
+        _animator.SetFloat(ANIM_AXIS_Y, _moveInput.magnitude);
+    }
+
+    #endregion
+
+    #region è¾“å…¥ç³»ç»Ÿå›è°ƒæ–¹æ³•
+
+    /// <summary>
+    /// è¾“å…¥ç³»ç»Ÿï¼šç§»åŠ¨æ§åˆ¶å›è°ƒ
+    /// å½“ç©å®¶ç§»åŠ¨æ‘‡æ†æˆ–WASDæ—¶è§¦å‘
+    /// </summary>
+    public void OnMove(InputValue inputValue)
+    {
+        _moveInput = inputValue.Get<Vector2>();
+    }
+
+    /// <summary>
+    /// è¾“å…¥ç³»ç»Ÿï¼šè·³è·ƒæ§åˆ¶å›è°ƒ
+    /// å½“ç©å®¶æŒ‰ä¸‹è·³è·ƒé”®æ—¶è§¦å‘
+    /// </summary>
+    public void OnJump(InputValue inputValue)
+    {
+        // åªåœ¨æŒ‰é”®æŒ‰ä¸‹æ—¶è®°å½•è·³è·ƒç¼“å†²
+        if (inputValue.isPressed)
         {
-            // »ñÈ¡µ±Ç°µÄ¶¯»­²ÎÊıÖµ
-            var AxisX = _animator.GetFloat("AxisX");
-            var AxisY = _animator.GetFloat("AxisY");
-
-            // ¸ù¾İÊäÈëÉèÖÃ¶¯»­²ÎÊı
-            AxisX = Mathf.MoveTowards(AxisX, _move.x, Time.deltaTime * 5f);
-            AxisY = Mathf.MoveTowards(AxisY, _move.y, Time.deltaTime * 5f);
-
-            // ¸üĞÂ¶¯»­²ÎÊı
-            _animator.SetFloat("AxisX", AxisX);
-            _animator.SetFloat("AxisY", AxisY);
+            _jumpBufferTimer = JumpBufferTime;
         }
     }
 
-    // ÒÆ¶¯ÊäÈë±äÁ¿£º´æ´¢À´×ÔÊäÈëÏµÍ³µÄÒÆ¶¯ÏòÁ¿
-    Vector2 _move;
+    #endregion
 
-    // ÒÆ¶¯ÊäÈë»Øµ÷º¯Êı£ºµ±ÊäÈëÏµÍ³¼ì²âµ½ÒÆ¶¯ÊäÈëÊ±µ÷ÓÃ
-    void OnMove(InputValue value)
+    #region è°ƒè¯•è¾…åŠ©æ–¹æ³•
+
+    /// <summary>
+    /// åœ¨Unityç¼–è¾‘å™¨ä¸­ç»˜åˆ¶è°ƒè¯•ä¿¡æ¯
+    /// ä»…åœ¨é€‰ä¸­å¯¹è±¡æ—¶æ˜¾ç¤º
+    /// </summary>
+    private void OnDrawGizmosSelected()
     {
-        // ´ÓÊäÈëÏµÍ³»ñÈ¡2DÏòÁ¿Öµ£¨Í¨³£À´×ÔWASD¡¢Ò¡¸ËµÈ£©
-        _move = value.Get<Vector2>();
+        // ç¡®ä¿æœ‰CharacterControllerç»„ä»¶
+        CharacterController cc = GetComponent<CharacterController>();
+        if (cc == null)
+            return;
+
+        // ç»˜åˆ¶åœ°é¢æ£€æµ‹çƒä½“
+        Gizmos.color = _isGrounded ? Color.green : Color.red;
+        Vector3 sphereCenter = transform.position +
+            Vector3.down * (cc.height / 2 + GroundCheckOffset);
+        Gizmos.DrawWireSphere(sphereCenter, GroundCheckRadius);
+
+        // ç»˜åˆ¶ç§»åŠ¨æ–¹å‘
+        if (_moveDirection.sqrMagnitude > 0.01f)
+        {
+            Gizmos.color = Color.blue;
+            Gizmos.DrawRay(transform.position, _moveDirection * 2f);
+        }
+
+        // ç»˜åˆ¶é€Ÿåº¦å‘é‡
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawRay(transform.position, _velocity * 0.5f);
     }
+
+    #endregion
 }
